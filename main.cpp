@@ -1,5 +1,3 @@
-#include <tuple>
-#include <type_traits>
 #include <iostream>
 #include <cxxabi.h>
 
@@ -7,7 +5,7 @@
 template <typename... Ts>
 struct type_list {};
 
-// Append a type T at the end of a type_list
+// Добавляем в type_list последним типом тип T
 template <typename List, typename T>
 struct append;
 
@@ -16,7 +14,7 @@ struct append<type_list<Ts...>, T> {
     using type = type_list<Ts..., T>;
 };
 
-// Prepend a type T at the front of a type_list
+// Добавляем тип T первым типом в начало type_list
 template <typename T, typename List>
 struct prepend;
 
@@ -25,7 +23,7 @@ struct prepend<T, type_list<Ts...>> {
     using type = type_list<T, Ts...>;
 };
 
-// Concat two type_lists
+// Объединяем два type_lists
 template <typename List1, typename List2>
 struct concat;
 
@@ -34,7 +32,7 @@ struct concat<type_list<Ts1...>, type_list<Ts2...>> {
     using type = type_list<Ts1..., Ts2...>;
 };
 
-// Extract last type from a type_list
+// Получаем последний тип в type_list
 template <typename List>
 struct last_type;
 
@@ -48,7 +46,7 @@ struct last_type<type_list<T, Ts...>> {
     using type = typename last_type<type_list<Ts...>>::type;
 };
 
-// pop_back_helper: recursively removes the last element, preserving order
+// pop_back_helper: реализует удаление последниего элемента из type_list для pop_back
 template <typename... Ts>
 struct pop_back_helper;
 
@@ -70,7 +68,7 @@ struct pop_back_helper<T, U, Ts...> {
     >::type;
 };
 
-// pop_back: removes last element from a type_list
+// pop_back: удаляем последний элемент из type_list
 template <typename List>
 struct pop_back;
 
@@ -79,7 +77,7 @@ struct pop_back<type_list<Ts...>> {
     using type = typename pop_back_helper<Ts...>::type;
 };
 
-// Combinations - process from right to left to preserve original order
+// Получаем на выходе type_list содержащий type_list'ы со всеми комбинациями шаблонных типов, переданных в него (типы передаются на вход завернутые в type_list)
 template <typename List>
 struct combinations;
 
@@ -110,45 +108,36 @@ public:
     >::type;
 };
 
-// Convert type_list<Ts...> to std::tuple<Ts...>
-template <typename TypeList>
-struct to_tuple;
-
+// Заменяем type_list в type_list<Ts...> на структуру result<Ts...>
 template<typename... Types>
-struct cnt {};
+struct xxx {};
+
+template <typename TypeList>
+struct to_result;
 
 template <typename... Ts>
-struct to_tuple<type_list<Ts...>> {
-    using type = cnt<Ts...>;
+struct to_result<type_list<Ts...>> {
+    using type = xxx<Ts...>;
 };
 
-// Map list of type_lists to list of tuples
+// Передаем type_list с type_list'ами, проходимся по ним и заменяем type_list на другую структуру
 template <typename TypeListList>
-struct map_to_tuples;
+struct map_to_results;
 
 template <typename... Lists>
-struct map_to_tuples<type_list<Lists...>> {
-    using type = type_list<typename to_tuple<Lists>::type...>;
+struct map_to_results<type_list<Lists...>> {
+    using type = type_list<typename to_result<Lists>::type...>;
 };
 
-// TemplateCombiner wrapper
+// Обертка для всего этого дела
 template <typename... Params>
 struct TemplateCombiner {
-    using all_combinations = typename map_to_tuples<
-        typename combinations<type_list<Params...>>::type
-    >::type;
+    using all_combinations = typename map_to_results<typename combinations<type_list<Params...>>::type>::type;
 };
 
 
 
-
-
-
-
-
-
-
-// Demangle helper to print types nicely
+// Вывод в консоль типа с после деманглинга
 template <typename T>
 void print_type() {
     int status = 0;
@@ -162,7 +151,7 @@ void print_all(type_list<Ts...>) {
     (print_type<Ts>(), ...);
 }
 
-// Demo structs
+// Структуры для комбинирования
 struct A {};
 struct B {};
 struct C {};
@@ -170,6 +159,7 @@ struct D {};
 struct E {};
 
 int main() {
+    // Проверка
     using combos = TemplateCombiner<A, B, C, D, E>::all_combinations;
     print_all(combos{});
 }
