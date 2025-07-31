@@ -1,141 +1,12 @@
 #include <iostream>
 #include <cxxabi.h>
+#include "TemplateCombiner.hpp"
 
-// Сохряняем в этом классе типы, инстанциируя его ими
-template <typename... Ts>
-struct type_list {};
-
-// Добавляем в type_list последним типом тип T
-template <typename List, typename T>
-struct append;
-
-template <typename... Ts, typename T>
-struct append<type_list<Ts...>, T> {
-    using type = type_list<Ts..., T>;
-};
-
-// Добавляем тип T первым типом в начало type_list
-template <typename T, typename List>
-struct prepend;
-
-template <typename T, typename... Ts>
-struct prepend<T, type_list<Ts...>> {
-    using type = type_list<T, Ts...>;
-};
-
-// Объединяем два type_lists
-template <typename List1, typename List2>
-struct concat;
-
-template <typename... Ts1, typename... Ts2>
-struct concat<type_list<Ts1...>, type_list<Ts2...>> {
-    using type = type_list<Ts1..., Ts2...>;
-};
-
-// Получаем последний тип в type_list
-template <typename List>
-struct last_type;
-
-template <typename T>
-struct last_type<type_list<T>> {
-    using type = T;
-};
-
-template <typename T, typename... Ts>
-struct last_type<type_list<T, Ts...>> {
-    using type = typename last_type<type_list<Ts...>>::type;
-};
-
-// pop_back_helper: реализует удаление последниего элемента из type_list для pop_back
-template <typename... Ts>
-struct pop_back_helper;
-
-template <>
-struct pop_back_helper<> {
-    using type = type_list<>;
-};
-
-template <typename T>
-struct pop_back_helper<T> {
-    using type = type_list<>;
-};
-
-template <typename T, typename U, typename... Ts>
-struct pop_back_helper<T, U, Ts...> {
-    using type = typename prepend<
-        T,
-        typename pop_back_helper<U, Ts...>::type
-    >::type;
-};
-
-// pop_back: удаляем последний элемент из type_list
-template <typename List>
-struct pop_back;
-
-template <typename... Ts>
-struct pop_back<type_list<Ts...>> {
-    using type = typename pop_back_helper<Ts...>::type;
-};
-
-// Получаем на выходе type_list содержащий type_list'ы со всеми комбинациями шаблонных типов, переданных в него (типы передаются на вход завернутые в type_list)
-template <typename List>
-struct combinations;
-
-template <>
-struct combinations<type_list<>> {
-    using type = type_list<type_list<>>;
-};
-
-template <typename... Ts>
-struct combinations<type_list<Ts...>> {
-private:
-    using last = typename last_type<type_list<Ts...>>::type;
-    using rest = typename pop_back<type_list<Ts...>>::type;
-    using tail_combos = typename combinations<rest>::type;
-
-    template <typename Combo>
-    struct append_last {
-        using type = typename append<Combo, last>::type;
-    };
-
-    template <typename... Combos>
-    static type_list<typename append_last<Combos>::type...> add_last(type_list<Combos...>);
-
-public:
-    using type = typename concat<
-        tail_combos,
-        decltype(add_last(tail_combos{}))
-    >::type;
-};
-
-// Заменяем type_list в type_list<Ts...> на структуру result<Ts...>
-template<typename... Types>
-struct xxx {};
-
-template <typename TypeList>
-struct to_result;
-
-template <typename... Ts>
-struct to_result<type_list<Ts...>> {
-    using type = xxx<Ts...>;
-};
-
-// Передаем type_list с type_list'ами, проходимся по ним и заменяем type_list на другую структуру
-template <typename TypeListList>
-struct map_to_results;
-
-template <typename... Lists>
-struct map_to_results<type_list<Lists...>> {
-    using type = type_list<typename to_result<Lists>::type...>;
-};
-
-// Обертка для всего этого дела
-template <typename... Params>
-struct TemplateCombiner {
-    using all_combinations = typename map_to_results<typename combinations<type_list<Params...>>::type>::type;
-};
-
-
+#include <boost/multi_index_container.hpp>
+#include <boost/multi_index/ordered_index.hpp>
+#include <boost/multi_index/composite_key.hpp>
+#include <type_traits>
+#include <tuple>
 
 // Вывод в консоль типа с после деманглинга
 template <typename T>
@@ -151,15 +22,118 @@ void print_all(type_list<Ts...>) {
     (print_type<Ts>(), ...);
 }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
 // Структуры для комбинирования
-struct A {};
-struct B {};
-struct C {};
-struct D {};
-struct E {};
+
+struct Key2 {};
+struct Key3 {};
+struct Key4 {};
+struct Key5 {};
+
+template<typename... Types>
+struct Tag {};
+
+struct ID {
+    int key1;
+};
+
+struct Key1 {
+    typedef int result_type;
+
+    result_type operator()(const ID& aId) const
+    {
+        return aId.key1;
+    }
+};
+
+using TAllTags = TemplateCombiner<Tag, Key1, Key2, Key3, Key4, Key5>::result_types;
+using AllTags = typename map_type_list<std::tuple, TAllTags>::type;
+
+
+
+/////////////////////////////////
+/* // Шаблон, превращающий Tags<Keys...> в индекс
+template <typename Tag>
+struct make_index;
+
+template <typename... Keys>
+struct make_index<Tag<Keys...>> {
+    using type = boost::multi_index::ordered_non_unique<
+        boost::multi_index::tag<Tag<Keys...>>,
+        boost::multi_index::composite_key<
+            ID,
+            Keys...
+        >
+    >;
+};
+// Утилита для преобразования tuple в типовой список
+template <typename Tuple, std::size_t... Is>
+auto make_indexed_by_impl(std::index_sequence<Is...>) {
+    return boost::multi_index::indexed_by<typename make_index<std::tuple_element_t<Is, Tuple>>::type...>{};
+}
+
+template <typename Tuple>
+using make_indexed_by = decltype(make_indexed_by_impl<Tuple>(
+    std::make_index_sequence<std::tuple_size_v<Tuple>>{}
+));
+ */
+
+template <typename Tag>
+struct make_index_from_tag;
+
+ template <typename... Keys>
+ struct make_index_from_tag<Tag<Keys...>> {
+     using type = boost::multi_index::ordered_non_unique<
+         boost::multi_index::tag<Tag<Keys...>>,
+         boost::multi_index::composite_key<
+             ID,
+             Keys...
+         >
+     >;
+ };
+
+ template <typename List>
+ struct make_index;
+
+template <typename Tf, typename... Ts>
+struct make_index<type_list<Tf, Ts...>> {
+    using type = typename make_index_from_tag<Tf>::type;
+};
+/////////////////////////////////
+
+
+
+using MyContainer = boost::multi_index::multi_index_container<
+    ID,
+    make_index<TAllTags>::type
+>;
+
+template <typename TKey1>
+using Test = boost::multi_index::multi_index_container
+<
+    ID,
+    boost::multi_index::ordered_non_unique
+    <
+        boost::multi_index::tag<Tag<TKey1>>,
+        boost::multi_index::composite_key<ID, TKey1>
+    >
+>;
 
 int main() {
     // Проверка
-    using combos = TemplateCombiner<A, B, C, D, E>::all_combinations;
-    print_all(combos{});
+    print_all(TAllTags{});
+    Test<Key1> xxx;
+    //print_type<MyContainer>();
 }
