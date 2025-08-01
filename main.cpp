@@ -1,12 +1,7 @@
 #include <iostream>
 #include <cxxabi.h>
-#include "TemplateCombiner.hpp"
+#include "ContainerGenerator.hpp"
 
-#include <boost/multi_index_container.hpp>
-#include <boost/multi_index/ordered_index.hpp>
-#include <boost/multi_index/composite_key.hpp>
-#include <type_traits>
-#include <tuple>
 
 // Вывод в консоль типа с после деманглинга
 template <typename T>
@@ -23,34 +18,26 @@ void print_all(type_list<Ts...>) {
 }
 
 
-
-
-
-
-
-
-
-
-
-
-
-
 // Структуры для комбинирования
 
-struct Key2 {};
-struct Key3 {};
-struct Key4 {};
-struct Key5 {};
 
-template<typename... Types>
-struct Tag {};
 
 struct ID {
     int key1;
+    int key2;
+    int key3;
+    int key4;
+    int key5;
+
+    // Для удобного вывода
+    friend std::ostream& operator<<(std::ostream& os, const ID& id) {
+        return os << "{" << id.key1 << ", " << id.key2 << ", " << id.key3
+                  << ", " << id.key4 << ", " << id.key5 << "}";
+    }
 };
 
 struct Key1 {
-    typedef int result_type;
+    using result_type = int;
 
     result_type operator()(const ID& aId) const
     {
@@ -58,82 +45,64 @@ struct Key1 {
     }
 };
 
-using TAllTags = TemplateCombiner<Tag, Key1, Key2, Key3, Key4, Key5>::result_types;
-using AllTags = typename map_type_list<std::tuple, TAllTags>::type;
+struct Key2 {
+    using result_type = int;
 
-
-
-/////////////////////////////////
-/* // Шаблон, превращающий Tags<Keys...> в индекс
-template <typename Tag>
-struct make_index;
-
-template <typename... Keys>
-struct make_index<Tag<Keys...>> {
-    using type = boost::multi_index::ordered_non_unique<
-        boost::multi_index::tag<Tag<Keys...>>,
-        boost::multi_index::composite_key<
-            ID,
-            Keys...
-        >
-    >;
+    result_type operator()(const ID& aId) const
+    {
+        return aId.key2;
+    }
 };
-// Утилита для преобразования tuple в типовой список
-template <typename Tuple, std::size_t... Is>
-auto make_indexed_by_impl(std::index_sequence<Is...>) {
-    return boost::multi_index::indexed_by<typename make_index<std::tuple_element_t<Is, Tuple>>::type...>{};
-}
 
-template <typename Tuple>
-using make_indexed_by = decltype(make_indexed_by_impl<Tuple>(
-    std::make_index_sequence<std::tuple_size_v<Tuple>>{}
-));
- */
+struct Key3 {
+    using result_type = int;
 
-template <typename Tag>
-struct make_index_from_tag;
-
- template <typename... Keys>
- struct make_index_from_tag<Tag<Keys...>> {
-     using type = boost::multi_index::ordered_non_unique<
-         boost::multi_index::tag<Tag<Keys...>>,
-         boost::multi_index::composite_key<
-             ID,
-             Keys...
-         >
-     >;
- };
-
- template <typename List>
- struct make_index;
-
-template <typename Tf, typename... Ts>
-struct make_index<type_list<Tf, Ts...>> {
-    using type = typename make_index_from_tag<Tf>::type;
+    result_type operator()(const ID& aId) const
+    {
+        return aId.key3;
+    }
 };
-/////////////////////////////////
 
+struct Key4 {
+    using result_type = int;
 
+    result_type operator()(const ID& aId) const
+    {
+        return aId.key4;
+    }
+};
 
-using MyContainer = boost::multi_index::multi_index_container<
-    ID,
-    make_index<TAllTags>::type
->;
+struct Key5 {
+    using result_type = int;
 
-template <typename TKey1>
-using Test = boost::multi_index::multi_index_container
+    result_type operator()(const ID& aId) const
+    {
+        return aId.key5;
+    }
+};
+
+using TContainer = typename ContainerGenerator
 <
     ID,
-    boost::multi_index::ordered_non_unique
-    <
-        boost::multi_index::tag<Tag<TKey1>>,
-        boost::multi_index::composite_key<ID, TKey1>
-    >
->;
+    boost::multi_index::hashed_unique,
+    boost::multi_index::hashed_non_unique,
+    Key1, Key2, Key3, Key4
+>::TContainer;
 
 int main() {
     // Проверка
-    print_all(TAllTags{});
-    Test<Key1> xxx;
-    //print_type<MyContainer>();
+    TContainer xxx;
+    // Добавим несколько элементов
+    xxx.insert({1, 2, 3, 4, 5});
+    xxx.insert({5, 3, 3, 2, 1});
+    xxx.insert({3, 3, 3, 3, 3});
+
+    const auto& index_by_key3 = xxx.get<Tag<Key1, Key2, Key3, Key4>>();
+    std::cout << "Elements with key3 == 3:\n";
+    auto range = index_by_key3.equal_range(std::tuple{5, 3, 3, 2});
+    for (auto it = range.first; it != range.second; ++it) {
+        std::cout << *it << "\n";
+    }
+
+    //print_type<TContainer>();
 }
